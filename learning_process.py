@@ -18,10 +18,12 @@ def learning_on_the_training_set():
     with tf.name_scope("train_prediction"):
         train_prediction = tf.nn.softmax(model.logits, name="train_prediction")
     with tf.name_scope("train_accuracy"):
-        train_accuracy = tf.metrics.accuracy(model.label_batch, train_prediction, name="train_accuracy")
-        tf.summary.scalar('train_accuracy', train_accuracy[0])
+        correct_prediction = tf.equal(tf.argmax(train_prediction, 1), tf.argmax(model.label_batch, 1))
+        # Calculate accuracy
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        tf.summary.scalar('train_accuracy', accuracy)
 
-     # ******************************************************************************************************************
+    # ******************************************************************************************************************
     #
     # Running of the graph for training
     #
@@ -54,8 +56,6 @@ def learning_on_the_training_set():
                                        model.loss,
                                        train_prediction
                 ])
-
-
 
                 ckpt = tf.train.get_checkpoint_state(os.path.dirname('checkpoints/checkpoint'))
                 # if that checkpoint exists, restore from checkpoint
