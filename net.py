@@ -17,14 +17,14 @@ class NatashaNet:
     def _create_inputs(self):
         """ Step 1: define the placeholders for input and output """
         with tf.name_scope("inputs"):
-            self.example_batch, self.label_batch = read_from_records.get_new_data_batch(self.folder)
+            self.example_batch, self.label_batch = read_from_records.get_new_data_batch(self.folder, self.batch_size)
 
             # reshape image to 1-D tensor
             self.reshaped_example_batch = tf.reshape(self.example_batch,
-                                                 [configuration_params.batch_size,
-                                                  configuration_params.unified_width *
-                                                  configuration_params.unified_height *
-                                                  configuration_params.num_channels])
+                                                     [self.batch_size,
+                                                      configuration_params.unified_width *
+                                                      configuration_params.unified_height *
+                                                      configuration_params.num_channels])
 
     def _create_logits(self):
         """ Step 3 + 4: define the model + the loss function """
@@ -45,8 +45,8 @@ class NatashaNet:
                 # define loss function to be NCE loss function
                 with tf.name_scope("loss"):
                     self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=self.logits,
-                                                                                  labels=self.label_batch),
-                                             name="loss")
+                                                                                       labels=self.label_batch),
+                                               name="loss")
                     tf.summary.scalar('loss', self.loss)
 
     def _create_optimizer(self):

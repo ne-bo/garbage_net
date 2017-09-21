@@ -82,15 +82,16 @@ def input_pipeline(file_names, batch_size, num_epochs):
                                                             num_threads=2,
                                                             min_after_dequeue=min_after_dequeue,
                                                             allow_smaller_final_batch=True)
-        # look at this to be sure that the same classes have the same one-hot labels
+
         tf.summary.image('example_batch', example_batch)
-        tf.summary.scalar('label_for_0_image_in_the_batch0', label_batch[0, 0])
-        tf.summary.scalar('label_for_0_image_in_the_batch1', label_batch[0, 1])
-        tf.summary.scalar('label_for_0_image_in_the_batch2', label_batch[0, 2])
+        # look at this to be sure that the same classes have the same one-hot labels
+        #tf.summary.scalar('label_for_0_image_in_the_batch0', label_batch[0, 0])
+        #tf.summary.scalar('label_for_0_image_in_the_batch1', label_batch[0, 1])
+        #tf.summary.scalar('label_for_0_image_in_the_batch2', label_batch[0, 2])
     return example_batch, label_batch
 
 
-def get_new_data_batch(folder):
+def get_new_data_batch(folder, batch_size):
     file_names = [("./tfrecords/" + folder + "/%s.jpg.tfrecords" % s) for s in load_filenames(folder)]
     print("file_names = ", file_names)
-    return input_pipeline(file_names, configuration_params.batch_size, configuration_params.num_epoch)
+    return input_pipeline(file_names, batch_size, configuration_params.num_epoch)
