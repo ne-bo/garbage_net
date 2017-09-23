@@ -27,14 +27,14 @@ def read_my_file_format(filename_queue):
     with tf.name_scope("image"):
         _, serialized_example = reader.read(filename_queue)
         features = tf.parse_single_example(serialized_example,
-        features={
-            'height': tf.FixedLenFeature([], tf.int64),
-            'width': tf.FixedLenFeature([], tf.int64),
-            'depth': tf.FixedLenFeature([], tf.int64),
-            'name': tf.FixedLenFeature([], tf.int64),
-            'label': tf.FixedLenFeature([], tf.int64),
-            'image_raw': tf.FixedLenFeature([], tf.string)},
-        name='name_for_operation_parse_single_example')
+                                           features={
+                                               'height': tf.FixedLenFeature([], tf.int64),
+                                               'width': tf.FixedLenFeature([], tf.int64),
+                                               'depth': tf.FixedLenFeature([], tf.int64),
+                                               'name': tf.FixedLenFeature([], tf.int64),
+                                               'label': tf.FixedLenFeature([], tf.int64),
+                                               'image_raw': tf.FixedLenFeature([], tf.string)},
+                                           name='name_for_operation_parse_single_example')
 
         image_raw = tf.cast(tf.decode_raw(features['image_raw'],
                                           tf.float64,
@@ -62,8 +62,8 @@ def read_my_file_format(filename_queue):
     return resized_image, label_one_hot
 
 
-def input_pipeline(file_names, batch_size, num_epochs):
-    filename_queue = tf.train.string_input_producer(file_names, num_epochs=num_epochs, shuffle=True)
+def input_pipeline(file_names, batch_size, num_epochs, shuffle):
+    filename_queue = tf.train.string_input_producer(file_names, num_epochs=num_epochs, shuffle=shuffle)
 
     with tf.name_scope("inputs"):
         example, label = read_my_file_format(filename_queue)
@@ -76,22 +76,35 @@ def input_pipeline(file_names, batch_size, num_epochs):
         min_after_dequeue = 1
         capacity = min_after_dequeue + 3 * batch_size
 
-        example_batch, label_batch = tf.train.shuffle_batch([example, label],
-                                                            batch_size=batch_size,
-                                                            capacity=capacity,
-                                                            num_threads=2,
-                                                            min_after_dequeue=min_after_dequeue,
-                                                            allow_smaller_final_batch=True)
+        if shuffle:
+            example_batch, label_batch = tf.train.shuffle_batch([example, label],
+                                                                batch_size=batch_size,
+                                                                capacity=capacity,
+                                                                num_threads=2,
+                                                                min_after_dequeue=min_after_dequeue,
+                                                                allow_smaller_final_batch=True)
+        else:
+            example_batch, label_batch = tf.train.batch([example, label],
+                                                        batch_size=batch_size,
+                                                        capacity=capacity,
+                                                        num_threads=2,
+                                                        allow_smaller_final_batch=True)
 
         tf.summary.image('example_batch', example_batch)
         # look at this to be sure that the same classes have the same one-hot labels
-        #tf.summary.scalar('label_for_0_image_in_the_batch0', label_batch[0, 0])
-        #tf.summary.scalar('label_for_0_image_in_the_batch1', label_batch[0, 1])
-        #tf.summary.scalar('label_for_0_image_in_the_batch2', label_batch[0, 2])
+        # tf.summary.scalar('label_for_0_image_in_the_batch0', label_batch[0, 0])
+        # tf.summary.scalar('label_for_0_image_in_the_batch1', label_batch[0, 1])
+        # tf.summary.scalar('label_for_0_image_in_the_batch2', label_batch[0, 2])
     return example_batch, label_batch
 
 
-def get_new_data_batch(folder, batch_size):
+def get_new_data_batch(folder, batch_size, shuffle):
     file_names = [("./tfrecords/" + folder + "/%s.jpg.tfrecords" % s) for s in load_filenames(folder)]
     print("file_names = ", file_names)
-    return input_pipeline(file_names, batch_size, configuration_params.num_epoch)
+    return input_pipeline(file_names, batch_size, configuration_params.num_epoch, shuffle)
+
+
+def get_file_names(folder):
+    file_names = [("./tfrecords/" + folder + "/%s.jpg.tfrecords" % s) for s in load_filenames(folder)]
+    print("file_names = ", file_names)
+    return file_names
