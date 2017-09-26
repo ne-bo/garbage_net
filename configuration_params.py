@@ -6,7 +6,7 @@ labels_file = dataset_directory + "labels"
 directory_for_saving_results = "./results/"
 
 learning_rate = 0.0001
-batch_size = 1000
+batch_size = 128
 num_labels = 2
 num_epoch = 3000
 

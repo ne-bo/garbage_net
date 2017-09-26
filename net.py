@@ -3,6 +3,14 @@ import configuration_params
 import utils
 import os
 import read_from_records
+from tensorflow.contrib.layers import fully_connected, conv2d, max_pool2d, dropout
+# from tflearn import conv_2d, max_pool_2d
+# from tflearn import activations
+
+# from tflearn import fully_connected
+from tensorflow.contrib.losses import softmax_cross_entropy
+from tensorflow.contrib.opt import LazyAdamOptimizer
+from tensorflow.contrib.metrics import accuracy
 
 
 class NatashaNet:
@@ -13,8 +21,23 @@ class NatashaNet:
         self.lr = learning_rate
         self.folder = folder
         self.global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
-        self.dropout = 0.99
+
+        self.dropout = 1.0
         self.pooling_scale = 2
+
+        self.filter_size_on_1_layer = 5
+        self.number_of_filters_on_1_layer = 20
+
+        self.filter_size_on_2_layer = 3
+        self.number_of_filters_on_2_layer = 20
+
+        self.number_of_neurons_in_1_fully_connected_layer = 64
+        self.number_of_neurons_in_2_fully_connected_layer = 32
+
+        self.height_after_1_pooling = configuration_params.unified_height // self.pooling_scale
+        self.height_after_2_pooling = self.height_after_1_pooling // self.pooling_scale
+        self.width_after_1_pooling = configuration_params.unified_width // self.pooling_scale
+        self.width_after_2_pooling = self.width_after_1_pooling // self.pooling_scale
 
     def _create_inputs(self):
         """ Step 1: define the placeholders for input and output """
@@ -23,128 +46,95 @@ class NatashaNet:
                 shuffle = False
             else:
                 shuffle = True
+            # Tensor input become 4-D: [Batch Size, Height, Width, Channel]
             self.example_batch, self.label_batch = read_from_records.get_new_data_batch(self.folder,
                                                                                         self.batch_size,
                                                                                         shuffle=shuffle)
             self.file_names = tf.convert_to_tensor(read_from_records.get_file_names(self.folder))
 
-    # Create some wrappers for simplicity
-    def _conv2d(self, x, W, b, strides=1):
-        # Conv2D wrapper, with bias and relu activation
-        x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='SAME')
-        x = tf.nn.bias_add(x, b)
-        with tf.name_scope("batch_normalization"):
-            x = tf.contrib.layers.batch_norm(x,
-                                             center=True, scale=True,
-                                             is_training=(self.folder == 'test'))
-        return tf.nn.relu(x)
-
-    def _maxpool2d(self, x, k):
-        # MaxPool2D wrapper
-        return tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='SAME')
-
-    def _create_weights_and_biases(self):
-        with tf.device('/gpu:0'):
-            with tf.name_scope("weights"):
-                filter_size_on_1_layer = 5
-                number_of_filters_on_1_layer = 32
-
-                filter_size_on_2_layer = 5
-                number_of_filters_on_2_layer = 64
-
-                number_of_neurons_in_1_fully_connected_layer = 1024
-
-                height_after_1_pooling = configuration_params.unified_height // self.pooling_scale
-                height_after_2_pooling = height_after_1_pooling // self.pooling_scale
-                width_after_1_pooling = configuration_params.unified_width // self.pooling_scale
-                width_after_2_pooling = width_after_1_pooling // self.pooling_scale
-
-                self.weights = {
-                    # conv 1
-                    'wc1': tf.Variable(tf.truncated_normal([filter_size_on_1_layer,
-                                                            filter_size_on_1_layer,
-                                                            configuration_params.num_channels,
-                                                            number_of_filters_on_1_layer])),
-                    # conv 2
-                    'wc2': tf.Variable(tf.truncated_normal([filter_size_on_2_layer,
-                                                            filter_size_on_2_layer,
-                                                            number_of_filters_on_1_layer,
-                                                            number_of_filters_on_2_layer])),
-                    # fully connected
-                    'wd1': tf.Variable(tf.truncated_normal([height_after_2_pooling *
-                                                            width_after_2_pooling *
-                                                            number_of_filters_on_2_layer,
-                                                            number_of_neurons_in_1_fully_connected_layer])),
-                    # (class prediction)
-                    'out': tf.Variable(tf.random_normal([number_of_neurons_in_1_fully_connected_layer,
-                                                         configuration_params.num_labels]))
-                }
-        with tf.device('/gpu:0'):
-            with tf.name_scope("biases"):
-                self.biases = {
-                    'bc1': tf.Variable(tf.truncated_normal([number_of_filters_on_1_layer])),
-                    'bc2': tf.Variable(tf.truncated_normal([number_of_filters_on_2_layer])),
-                    'bd1': tf.Variable(tf.truncated_normal([number_of_neurons_in_1_fully_connected_layer])),
-                    'out': tf.Variable(tf.random_normal([configuration_params.num_labels]))
-                }
-
     def _create_logits(self):
         """ Step 3 : define the model """
-        with tf.device('/gpu:0'):
-            with tf.name_scope("input"):
-                # Tensor input become 4-D: [Batch Size, Height, Width, Channel]
-                x = self.example_batch
-            with tf.name_scope("first_convolutional_layer"):
-                # Convolution Layer
-                conv1 = self._conv2d(x, self.weights['wc1'], self.biases['bc1'])
+        with tf.device('/cpu:0'):
 
-            with tf.name_scope("pooling_after_first_convolutional_layer"):
-                # Max Pooling (down-sampling)
-                conv1 = self._maxpool2d(conv1, k=self.pooling_scale)
+            conv1 = conv2d(self.example_batch,
+                           kernel_size=self.filter_size_on_1_layer,
+                           num_outputs=self.number_of_filters_on_1_layer,
+                           stride=1,
+                           padding='SAME',
+                           activation_fn=tf.nn.elu,
+                           normalizer_fn=tf.contrib.layers.batch_norm,
+                           normalizer_params={"is_training": (self.folder == 'test')},
+                           scope="first_convolutional_layer")
 
-            with tf.name_scope("second_convolutional_layer"):
-                # Convolution Layer
-                conv2 = self._conv2d(conv1, self.weights['wc2'], self.biases['bc2'])
-            with tf.name_scope("pooling_after_second_convolutional_layer"):
-                # Max Pooling (down-sampling)
-                conv2 = self._maxpool2d(conv2, k=self.pooling_scale)
+            conv1 = max_pool2d(conv1,
+                               kernel_size=self.pooling_scale,
+                               stride=1,
+                               padding='SAME',
+                               scope="pooling_after_first_convolutional_layer")
 
-            with tf.name_scope("fully_connected_layer"):
-                # Fully connected layer
-                # Reshape conv2 output to fit fully connected layer input
-                fc1 = tf.reshape(conv2, [-1, self.weights['wd1'].get_shape().as_list()[0]])
-                fc1 = tf.add(tf.matmul(fc1, self.weights['wd1']), self.biases['bd1'])
-                fc1 = tf.nn.relu(fc1)
+            conv2 = conv2d(conv1,
+                           kernel_size=self.filter_size_on_2_layer,
+                           num_outputs=self.number_of_filters_on_2_layer,
+                           stride=1,
+                           padding='SAME',
+                           activation_fn=tf.nn.elu,
+                           normalizer_fn=tf.contrib.layers.batch_norm,
+                           normalizer_params={"is_training": (self.folder == 'test')},
+                           scope="second_convolutional_layer")
 
-            with tf.name_scope("batch_normalization"):
-                bn = tf.contrib.layers.batch_norm(fc1,
-                                                  center=True, scale=True,
-                                                  is_training=(self.folder == 'test'))
+            conv2 = max_pool2d(conv2,
+                               kernel_size=self.pooling_scale,
+                               stride=1,
+                               padding='SAME',
+                               scope="pooling_after_second_convolutional_layer")
 
-            with tf.name_scope("dropout"):
-                # Apply Dropout
-                bn = tf.nn.dropout(bn, self.dropout)
+            # Fully connected layer
+            # Reshape conv2 output to fit fully connected layer input
+            fc1 = tf.reshape(conv2, [-1,
+                                     conv2.get_shape().as_list()[1] *
+                                     conv2.get_shape().as_list()[2] *
+                                     conv2.get_shape().as_list()[3] ])
 
-            with tf.name_scope("model_output_logits"):
-                # Output, class prediction
-                self.logits = tf.add(tf.matmul(bn, self.weights['out']), self.biases['out'])
+            fc1 = fully_connected(fc1,
+                                   num_outputs=self.number_of_neurons_in_1_fully_connected_layer,
+                                   scope='first_fully_connected_layer',
+                                   activation_fn=tf.nn.elu,
+                                   normalizer_fn=tf.contrib.layers.batch_norm,
+                                   normalizer_params={"is_training": (self.folder == 'test')})
+
+            fc2 = fully_connected(fc1,
+                                   num_outputs=self.number_of_neurons_in_2_fully_connected_layer,
+                                   scope='second_fully_connected_layer',
+                                   activation_fn=tf.nn.elu,
+                                   normalizer_fn=tf.contrib.layers.batch_norm,
+                                   normalizer_params={"is_training": (self.folder == 'test')})
+
+            # Apply Dropout
+            do = dropout(fc2,
+                         keep_prob=self.dropout,
+                         scope="dropout")
+
+            self.logits = fully_connected(do,
+                                          num_outputs=configuration_params.num_labels,
+                                          scope='model_output_logits',
+                                          activation_fn=tf.nn.softmax,
+                                          normalizer_fn=tf.contrib.layers.batch_norm,
+                                          normalizer_params={"is_training": (self.folder == 'test')})
 
     def _create_loss(self):
         """ Step 4: define the loss function """
         with tf.device('/cpu:0'):
-            with tf.name_scope("loss"):
-                # define loss function to be NCE loss function
-                with tf.name_scope("loss"):
-                    self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=self.logits,
-                                                                                       labels=self.label_batch),
-                                               name="loss")
-                    tf.summary.scalar('loss', self.loss)
+            self.loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(logits=self.logits,
+                                                                       onehot_labels=self.label_batch,
+                                                                       scope="loss"))
+            tf.summary.scalar('loss', self.loss)
 
     def _create_optimizer(self):
         """ Step 5: define optimizer """
         with tf.device('/cpu:0'):
-            self.optimizer = tf.train.AdamOptimizer(self.lr).minimize(self.loss,
-                                                                      global_step=self.global_step)
+            self.optimizer = LazyAdamOptimizer(learning_rate=self.lr,
+                                               name="LazyAdam").minimize(self.loss,
+                                                                         global_step=self.global_step)
 
     def _create_predictions_and_accuracy(self):
         with tf.device('/cpu:0'):
@@ -165,7 +155,6 @@ class NatashaNet:
     def build_graph(self):
         """ Build the graph for our model """
         self._create_inputs()
-        self._create_weights_and_biases()
         self._create_logits()
         self._create_loss()
         self._create_optimizer()
@@ -174,7 +163,6 @@ class NatashaNet:
     def build_graph_with_output(self):
         """ Build the graph for our model """
         self._create_inputs()
-        self._create_weights_and_biases()
         self._create_logits()
         self._create_loss()
         self._create_optimizer()
