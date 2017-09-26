@@ -44,7 +44,7 @@ class NatashaNet:
         return tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='SAME')
 
     def _create_weights_and_biases(self):
-        with tf.device('/cpu:0'):
+        with tf.device('/gpu:0'):
             with tf.name_scope("weights"):
                 filter_size_on_1_layer = 5
                 number_of_filters_on_1_layer = 32
@@ -79,7 +79,7 @@ class NatashaNet:
                     'out': tf.Variable(tf.random_normal([number_of_neurons_in_1_fully_connected_layer,
                                                          configuration_params.num_labels]))
                 }
-        with tf.device('/cpu:0'):
+        with tf.device('/gpu:0'):
             with tf.name_scope("biases"):
                 self.biases = {
                     'bc1': tf.Variable(tf.truncated_normal([number_of_filters_on_1_layer])),
@@ -90,7 +90,7 @@ class NatashaNet:
 
     def _create_logits(self):
         """ Step 3 : define the model """
-        with tf.device('/cpu:0'):
+        with tf.device('/gpu:0'):
             with tf.name_scope("input"):
                 # Tensor input become 4-D: [Batch Size, Height, Width, Channel]
                 x = self.example_batch

@@ -1,4 +1,6 @@
 1. Add augmentation
-2. Add batch normalization - лштв ща вщщту
+2. Add batch normalization - somehow done
 3. Try to learn how to finetune existing nets
-4. Learn how to use GPU
+4. Learn how to use GPU - somehow done
+5. Rewrite in more high-level style
+
