@@ -8,7 +8,5 @@ def main():
     learning_process.evaluation_on_the_test_set()
 
 
-
-
 if __name__ == '__main__':
     main()

@@ -19,3 +19,4 @@ skip_step = 10
 
 
 test_batch_size = len(os.listdir("./tfrecords/test/"))
+full_train_batch_size = len(os.listdir("./tfrecords/train/"))

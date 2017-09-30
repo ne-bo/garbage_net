@@ -40,22 +40,25 @@ def learning_on_the_training_set():
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
-        i = 0
         try:
+            i = model.global_step.eval()
             while not (coord.should_stop() or i == configuration_params.num_epoch):
-                summary, o, l, tp = sess.run([merged,
-                                              model.optimizer,
-                                              model.loss,
-                                              model.prediction
-                                              ])
+                #model._create_inputs()
+                summary, o, l, tp, gs = sess.run([merged,
+                                                   model.loss,
+                                                   model.optimizer,
+                                                   model.prediction,
+                                                   model.global_step
+                                                   ])
+
 
                 ckpt = tf.train.get_checkpoint_state(os.path.dirname('checkpoints/checkpoint'))
                 # if that checkpoint exists, restore from checkpoint
-                if ckpt and ckpt.model_checkpoint_path:
-                    saver.restore(sess, ckpt.model_checkpoint_path)
+                #if ckpt and ckpt.model_checkpoint_path:
+                #    saver.restore(sess, ckpt.model_checkpoint_path)
 
                 if i % 10 == 0:
-                    writer_graph.add_summary(summary, i)
+                    writer_graph.add_summary(summary, global_step=i)
                     print(datetime.datetime.now())
                     print('i = ', i)
                     saver.save(sess, 'checkpoints/natasha-model', i)
